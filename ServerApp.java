@@ -27,13 +27,15 @@ public class ServerApp implements Runnable {
                 //server_log.append("Listening for requests...\n");
                 System.out.println("Listening for requests...");
                 Socket socket = server.accept();
+                 System.out.println("Client connected from " + socket.getInetAddress().getHostAddress() + ":" + socket.getPort());
+
                 ObjectInputStream input_stream = new ObjectInputStream(socket.getInputStream());
                 ObjectOutputStream output_stream = new ObjectOutputStream(socket.getOutputStream());
 
                 ArrayList<String> received_request = (ArrayList<String>) input_stream.readObject();
-                float selected_bitrate = Float.parseFloat(received_request.get(0));
+                float maxResolution = Integer.parseInt(received_request.get(0));
                 String selected_format = received_request.get(1);
-                server_log.append("Received request for " + selected_bitrate + " bitrate and " + selected_format + " format, ");
+                server_log.append("Received request for " + maxResolution + " resolution and " + selected_format + " format, ");
 
                 ArrayList<String> available_videos = new ArrayList<>();
 
@@ -46,12 +48,12 @@ public class ServerApp implements Runnable {
                         if (parts.length >= 2) {
                             try {
 
-                                String bitrateWithFormat = parts[1];
+                                
 
-                                String numericPart = bitrateWithFormat.split("M")[0];
-                                float current_video_bitrate = Float.parseFloat(numericPart);
+                                String resolutionPart = parts[1].replaceAll("[^0-9]","");
+                                int videoResolution = Integer.parseInt(resolutionPart);
 
-                                if (selected_bitrate >= current_video_bitrate) {
+                                if (videoResolution <= maxResolution) {
                                     available_videos.add(current_video);
                                 }
 
