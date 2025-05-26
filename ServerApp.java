@@ -1,4 +1,3 @@
-
 package com.mycompany.polumesa_project;
 
 import java.io.*;
@@ -6,27 +5,20 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.logging.Level;
-import javax.swing.JTextArea;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 public class ServerApp implements Runnable {
 
-    static Logger log = LogManager.getLogger(ServerApp.class);
     private static ServerSocket server;
-    private static JTextArea server_log;
     private static Process currentStreamProcess = null;
+    private static int PORT = 5001; // default port but can be changed by args
 
     public static void startServer() {
         try {
-            server = new ServerSocket(5000);
+            server = new ServerSocket(PORT);
             File[] video_list = new File("videos/").listFiles();
 
             while (true) {
-                System.out.println("Listening for requests...");
                 Socket socket = server.accept();
-                System.out.println("Client connected from " + socket.getInetAddress().getHostAddress() + ":" + socket.getPort());
-
                 new Thread(() -> handleClient(socket, video_list)).start();
             }
 
@@ -36,10 +28,12 @@ public class ServerApp implements Runnable {
     }
 
     private static void handleClient(Socket socket, File[] video_list) {
-        try (ObjectInputStream input_stream = new ObjectInputStream(socket.getInputStream());
-             ObjectOutputStream output_stream = new ObjectOutputStream(socket.getOutputStream())) {
-
+        try (
+            ObjectInputStream input_stream = new ObjectInputStream(socket.getInputStream());
+            ObjectOutputStream output_stream = new ObjectOutputStream(socket.getOutputStream())
+        ) {
             Object request = input_stream.readObject();
+
             if (request instanceof ArrayList) {
                 ArrayList<String> received_request = (ArrayList<String>) request;
 
@@ -53,7 +47,7 @@ public class ServerApp implements Runnable {
                     File newFile = findLowerResolutionFile(video_list, format, newRes);
                     if (newFile != null) {
                         System.out.println("Switching stream to file: " + newFile.getName());
-                        startFfmpegStream(newFile.getAbsolutePath(), "UDP"); // change to use last used protocol if needed
+                        startFfmpegStream(newFile.getAbsolutePath(), "UDP");
                     }
 
                     return;
@@ -61,7 +55,6 @@ public class ServerApp implements Runnable {
 
                 float maxResolution = Integer.parseInt(received_request.get(0));
                 String selected_format = received_request.get(1);
-                if (server_log != null) server_log.append("Received request for " + maxResolution + " resolution and " + selected_format + " format\n");
 
                 ArrayList<String> available_videos = new ArrayList<>();
 
@@ -69,25 +62,25 @@ public class ServerApp implements Runnable {
                     String current_video = video.getName();
                     if (current_video.endsWith("." + selected_format)) {
                         String[] parts = current_video.split("-");
+
                         if (parts.length >= 2) {
                             try {
                                 String resolutionPart = parts[1].replaceAll("[^0-9]", "");
                                 int videoResolution = Integer.parseInt(resolutionPart);
+
                                 if (videoResolution <= maxResolution) {
                                     available_videos.add(current_video);
                                 }
-                            } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-                                log.warn("Skipping malformed filename: " + current_video);
-                            }
+                            } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {}
                         }
                     }
                 }
 
                 output_stream.writeObject(available_videos);
+
                 ArrayList<String> stream_specs = (ArrayList<String>) input_stream.readObject();
                 String selected_video = stream_specs.get(0);
                 String selected_protocol = stream_specs.get(1);
-                if (server_log != null) server_log.append("Streaming with " + selected_protocol + ": " + selected_video + "\n");
 
                 String videos_dir_fullpath = System.getProperty("user.dir") + "/videos";
                 currentStreamProcess = startFfmpegStream(videos_dir_fullpath + "/" + selected_video, selected_protocol);
@@ -96,8 +89,9 @@ public class ServerApp implements Runnable {
                 input_stream.close();
                 socket.close();
             }
+
         } catch (IOException | ClassNotFoundException e) {
-            log.error("Client handler error", e);
+            e.printStackTrace();
         }
     }
 
@@ -162,6 +156,11 @@ public class ServerApp implements Runnable {
     }
 
     public static void main(String[] args) {
+        if (args.length > 0) {
+            try {
+                PORT = Integer.parseInt(args[0]);
+            } catch (NumberFormatException ignored) {}
+        }
         new Thread(new ServerApp()).start();
     }
 }
