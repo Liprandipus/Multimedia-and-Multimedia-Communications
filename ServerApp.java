@@ -155,12 +155,15 @@ public class ServerApp implements Runnable {
         startServer();
     }
 
-    public static void main(String[] args) {
-        if (args.length > 0) {
-            try {
-                PORT = Integer.parseInt(args[0]);
-            } catch (NumberFormatException ignored) {}
+   public static void main(String[] args) {
+    if (args.length > 0) {
+        try {
+            PORT = Integer.parseInt(args[0]);
+            System.out.println("Server running on port " + PORT); 
+        } catch (NumberFormatException ignored) {
+            System.out.println("Invalid port argument: " + args[0]);  //debug
         }
-        new Thread(new ServerApp()).start();
     }
+    new Thread(new ServerApp()).start();
+}
 }
