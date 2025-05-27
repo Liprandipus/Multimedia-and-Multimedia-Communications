@@ -11,18 +11,21 @@ import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
+import java.util.logging.Logger;
 
 public class ClientApp implements Runnable {
 
     private final String serverHost = "localhost";
-    private final int serverPort = 5000;
+    private final int serverPort = 5000; //default port
     private volatile int autoResolution = 0;
     private volatile String format = "";
+    private final Logger logger = AppLogger.getLogger();
 
     @Override
     public void run() {
+       
         try (Socket socket = new Socket(serverHost, serverPort)) {
-            System.out.println("Connected to server.");
+             logger.info("Connected to server.");
 
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
@@ -30,14 +33,14 @@ public class ClientApp implements Runnable {
             Scanner scanner = new Scanner(System.in);
 
             float downloadSpeedMbps = runSpeedTest();
-            System.out.printf("Download speed: %.2f Mbps\n", downloadSpeedMbps);
+            logger.info(String.format("Download speed: %.2f Mbps", downloadSpeedMbps));
 
             if (downloadSpeedMbps < 1.0) autoResolution = 240;
             else if (downloadSpeedMbps < 3.0) autoResolution = 480;
             else if (downloadSpeedMbps < 6.0) autoResolution = 720;
             else autoResolution = 1080;
 
-            System.out.println("Auto-selected resolution: " + autoResolution + "p");
+            logger.info("Auto-selected resolution: " + autoResolution + "p");
 
             System.out.print("Enter desired format (e.g. mp4): ");
             format = scanner.nextLine();
@@ -49,11 +52,11 @@ public class ClientApp implements Runnable {
 
             ArrayList<String> availableVideos = (ArrayList<String>) in.readObject();
             if (availableVideos.isEmpty()) {
-                System.out.println("No videos available with these specs.");
+                logger.warning("No videos available with these specs.");
                 return;
             }
 
-            System.out.println("Available videos:");
+            logger.info("Available videos received: " + availableVideos.size());
             for (int i = 0; i < availableVideos.size(); i++) {
                 System.out.println("  [" + i + "] " + availableVideos.get(i));
             }
@@ -73,9 +76,9 @@ public class ClientApp implements Runnable {
                     if (res <= 240) protocol = "TCP";
                     else if (res <= 480) protocol = "UDP";
                     else protocol = "RTP";
-                    System.out.println("Auto-selected protocol: " + protocol);
+                     logger.info("Auto-selected protocol: " + protocol);
                 } catch (Exception e) {
-                    System.out.println("Could not determine resolution. Defaulting to TCP.");
+                    logger.warning("Could not determine resolution. Defaulting to TCP.");
                     protocol = "TCP";
                 }
             }
@@ -84,7 +87,7 @@ public class ClientApp implements Runnable {
             streamSpecs.add(selectedVideo);
             streamSpecs.add(protocol);
             out.writeObject(streamSpecs);
-            System.out.println("Streaming request sent successfully.");
+            logger.info("Streaming request sent successfully for: " + selectedVideo);
 
             // FFmpeg stream recording (optional)
             ArrayList<String> recordCommand = new ArrayList<>();
@@ -112,9 +115,9 @@ public class ClientApp implements Runnable {
                 ProcessBuilder builder = new ProcessBuilder(recordCommand);
                 builder.inheritIO();
                 builder.start();
-                System.out.println("FFmpeg recording started locally.");
+                  logger.info("FFmpeg recording started.");
             } catch (IOException e) {
-                System.out.println("Failed to start ffmpeg for recording.");
+                 logger.warning("Failed to start ffmpeg for recording: " + e.getMessage());
                 e.printStackTrace();
             }
 
@@ -124,7 +127,7 @@ public class ClientApp implements Runnable {
                     while (true) {
                         Thread.sleep(10000);
                         float newSpeed = runSpeedTest();
-                        System.out.println("Adaptive check: speed = " + newSpeed + " Mbps");
+                        logger.info("Adaptive check: speed = " + newSpeed + " Mbps");
 
                         int newRes;
                         if (newSpeed < 1.0) newRes = 240;
@@ -133,7 +136,7 @@ public class ClientApp implements Runnable {
                         else newRes = 1080;
 
                         if (newRes < autoResolution) {
-                            System.out.println("Requesting adaptive switch to " + newRes + "p");
+                             logger.info("Requesting adaptive switch to " + newRes + "p");
                             try (Socket adaptSocket = new Socket(serverHost, serverPort)) {
                                 ObjectOutputStream adaptOut = new ObjectOutputStream(adaptSocket.getOutputStream());
                                 ArrayList<String> adaptiveRequest = new ArrayList<>();
@@ -146,12 +149,12 @@ public class ClientApp implements Runnable {
                         }
                     }
                 } catch (Exception e) {
-                    e.printStackTrace();
+                     logger.warning("Error in adaptive streaming: " + e.getMessage());
                 }
             }).start();
 
         } catch (IOException | ClassNotFoundException e) {
-            e.printStackTrace();
+              logger.severe("Client error: " + e.getMessage());
         }
     }
 
@@ -169,7 +172,7 @@ public class ClientApp implements Runnable {
             }
             @Override
             public void onError(SpeedTestError speedTestError, String errorMessage) {
-                System.out.println("Speed test error: " + errorMessage);
+                AppLogger.getLogger().warning("Speed test error: " + errorMessage);
                 latch.countDown();
             }
             @Override
