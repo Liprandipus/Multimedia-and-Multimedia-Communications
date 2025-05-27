@@ -30,6 +30,10 @@ public class LoadBalancer {
         String[] parts = backend.split(":");
         String host = parts[0];
         int port = Integer.parseInt(parts[1]);
+        
+        // typing to stdout where the client has been redirected
+        String clientInfo = clientSocket.getInetAddress().getHostAddress() + ":" + clientSocket.getPort();
+        System.out.println("Redirecting client " + clientInfo + " → " + backend);
 
         try (Socket backendSocket = new Socket(host, port)) {
             System.out.println("Redirecting client to backend " + backend);
