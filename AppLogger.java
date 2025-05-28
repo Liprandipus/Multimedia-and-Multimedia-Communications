@@ -11,10 +11,11 @@ import java.util.logging.*;
  */
 public class AppLogger {
         private static final Logger logger = Logger.getLogger("PolumesaLogger");
-
+        //added staticis logger
+        private static final Logger statsLogger = Logger.getLogger("StatsLogger");
     static{
        try{
-           LogManager.getLogManager().reset();
+           //loggs
            logger.setLevel(Level.INFO);
            
            ConsoleHandler ch = new ConsoleHandler();
@@ -26,6 +27,13 @@ public class AppLogger {
            fh.setFormatter(new SimpleFormatter());
            logger.addHandler(fh);
            
+           //stats logger
+           
+           FileHandler statsHandler = new FileHandler("streaming_stats.log",true);
+           statsHandler.setLevel(Level.INFO);
+           statsLogger.addHandler(statsHandler);
+           statsHandler.setFormatter(new SimpleFormatter());
+           
            
 
 
@@ -36,5 +44,9 @@ public class AppLogger {
 }
     public static Logger getLogger(){
         return logger;
+    }
+    
+    public static Logger getStatsLogger(){
+        return statsLogger;
     }
 }
