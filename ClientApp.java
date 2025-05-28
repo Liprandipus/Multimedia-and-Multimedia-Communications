@@ -1,4 +1,3 @@
-
 package com.mycompany.polumesa_project;
 
 import fr.bmartel.speedtest.SpeedTestSocket;
@@ -8,6 +7,9 @@ import fr.bmartel.speedtest.SpeedTestReport;
 
 import java.io.*;
 import java.net.Socket;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Scanner;
 import java.util.concurrent.CountDownLatch;
@@ -20,12 +22,18 @@ public class ClientApp implements Runnable {
     private volatile int autoResolution = 0;
     private volatile String format = "";
     private final Logger logger = AppLogger.getLogger();
+    private final Logger statsLogger = AppLogger.getStatsLogger();
+
+    private LocalDateTime startTime;
+    private LocalDateTime endTime;
 
     @Override
     public void run() {
-       
+
         try (Socket socket = new Socket(serverHost, serverPort)) {
-             logger.info("Connected to server.");
+            startTime = LocalDateTime.now();
+            logger.info("Connected to server.");
+            statsLogger.info(">>> Streaming client started successfully. Ready for input."); //debugging
 
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
@@ -35,10 +43,15 @@ public class ClientApp implements Runnable {
             float downloadSpeedMbps = runSpeedTest();
             logger.info(String.format("Download speed: %.2f Mbps", downloadSpeedMbps));
 
-            if (downloadSpeedMbps < 1.0) autoResolution = 240;
-            else if (downloadSpeedMbps < 3.0) autoResolution = 480;
-            else if (downloadSpeedMbps < 6.0) autoResolution = 720;
-            else autoResolution = 1080;
+            if (downloadSpeedMbps < 1.0) {
+                autoResolution = 240;
+            } else if (downloadSpeedMbps < 3.0) {
+                autoResolution = 480;
+            } else if (downloadSpeedMbps < 6.0) {
+                autoResolution = 720;
+            } else {
+                autoResolution = 1080;
+            }
 
             logger.info("Auto-selected resolution: " + autoResolution + "p");
 
@@ -73,10 +86,14 @@ public class ClientApp implements Runnable {
                     String[] parts = selectedVideo.split("-");
                     String resolutionPart = parts[1].replaceAll("[^0-9]", "");
                     int res = Integer.parseInt(resolutionPart);
-                    if (res <= 240) protocol = "TCP";
-                    else if (res <= 480) protocol = "UDP";
-                    else protocol = "RTP";
-                     logger.info("Auto-selected protocol: " + protocol);
+                    if (res <= 240) {
+                        protocol = "TCP";
+                    } else if (res <= 480) {
+                        protocol = "UDP";
+                    } else {
+                        protocol = "RTP";
+                    }
+                    logger.info("Auto-selected protocol: " + protocol);
                 } catch (Exception e) {
                     logger.warning("Could not determine resolution. Defaulting to TCP.");
                     protocol = "TCP";
@@ -115,9 +132,9 @@ public class ClientApp implements Runnable {
                 ProcessBuilder builder = new ProcessBuilder(recordCommand);
                 builder.inheritIO();
                 builder.start();
-                  logger.info("FFmpeg recording started.");
+                logger.info("FFmpeg recording started.");
             } catch (IOException e) {
-                 logger.warning("Failed to start ffmpeg for recording: " + e.getMessage());
+                logger.warning("Failed to start ffmpeg for recording: " + e.getMessage());
                 e.printStackTrace();
             }
 
@@ -130,13 +147,18 @@ public class ClientApp implements Runnable {
                         logger.info("Adaptive check: speed = " + newSpeed + " Mbps");
 
                         int newRes;
-                        if (newSpeed < 1.0) newRes = 240;
-                        else if (newSpeed < 3.0) newRes = 480;
-                        else if (newSpeed < 6.0) newRes = 720;
-                        else newRes = 1080;
+                        if (newSpeed < 1.0) {
+                            newRes = 240;
+                        } else if (newSpeed < 3.0) {
+                            newRes = 480;
+                        } else if (newSpeed < 6.0) {
+                            newRes = 720;
+                        } else {
+                            newRes = 1080;
+                        }
 
                         if (newRes < autoResolution) {
-                             logger.info("Requesting adaptive switch to " + newRes + "p");
+                            logger.info("Requesting adaptive switch to " + newRes + "p");
                             try (Socket adaptSocket = new Socket(serverHost, serverPort)) {
                                 ObjectOutputStream adaptOut = new ObjectOutputStream(adaptSocket.getOutputStream());
                                 ArrayList<String> adaptiveRequest = new ArrayList<>();
@@ -149,12 +171,28 @@ public class ClientApp implements Runnable {
                         }
                     }
                 } catch (Exception e) {
-                     logger.warning("Error in adaptive streaming: " + e.getMessage());
+                    logger.warning("Error in adaptive streaming: " + e.getMessage());
                 }
             }).start();
 
+            //Statistics build
+            endTime = LocalDateTime.now();
+            Duration playDuration = Duration.between(startTime, endTime);
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+            String stats
+                    = "START: " + startTime.format(formatter)
+                    + " | END: " + endTime.format(formatter)
+                    + " | DURATION: " + playDuration.getSeconds() + "s"
+                    + " | RES: " + autoResolution + "p"
+                    + " | FORMAT: " + format
+                    + " | PROTOCOL: " + protocol
+                    + " | FILE: " + selectedVideo;
+
+            statsLogger.info(stats);
+
         } catch (IOException | ClassNotFoundException e) {
-              logger.severe("Client error: " + e.getMessage());
+            logger.severe("Client error: " + e.getMessage());
         }
     }
 
@@ -170,13 +208,16 @@ public class ClientApp implements Runnable {
                 speedResult[0] = bitsPerSecond / (1024 * 1024);
                 latch.countDown();
             }
+
             @Override
             public void onError(SpeedTestError speedTestError, String errorMessage) {
                 AppLogger.getLogger().warning("Speed test error: " + errorMessage);
                 latch.countDown();
             }
+
             @Override
-            public void onProgress(float percent, SpeedTestReport report) {}
+            public void onProgress(float percent, SpeedTestReport report) {
+            }
         });
 
         speedTestSocket.startDownload("http://speedtest.tele2.net/1MB.zip");
