@@ -19,7 +19,11 @@ public class ServerApp implements Runnable {
             server = new ServerSocket(PORT);
             logger.info("Server started on port " + PORT);
 
-            File[] video_list = new File("videos/").listFiles();
+            File folder = new File("videos/");
+            System.out.println("Exists: " + folder.exists());
+            System.out.println("Is directory: " + folder.isDirectory());
+            System.out.println("Absolute path: " + folder.getAbsolutePath());
+            File[] video_list = folder.listFiles();
 
             while (true) {
                 Socket socket = server.accept();
@@ -35,9 +39,7 @@ public class ServerApp implements Runnable {
 
     private static void handleClient(Socket socket, File[] video_list) {
         try (
-            ObjectInputStream input_stream = new ObjectInputStream(socket.getInputStream());
-            ObjectOutputStream output_stream = new ObjectOutputStream(socket.getOutputStream())
-        ) {
+                ObjectInputStream input_stream = new ObjectInputStream(socket.getInputStream()); ObjectOutputStream output_stream = new ObjectOutputStream(socket.getOutputStream())) {
             Object request = input_stream.readObject();
 
             if (request instanceof ArrayList) {
@@ -72,15 +74,17 @@ public class ServerApp implements Runnable {
                 ArrayList<String> available_videos = new ArrayList<>();
 
                 for (File video : video_list) {
+                    System.out.println("DEBUG: Ελέγχεται αρχείο: " + video.getName());
                     String current_video = video.getName();
                     if (current_video.endsWith("." + selected_format)) {
                         String[] parts = current_video.split("-");
                         if (parts.length >= 2) {
                             try {
-                                int videoResolution = Integer.parseInt(parts[1].replaceAll("[^0-9]", ""));
-                                if (videoResolution <= maxResolution) {
+                                //int videoResolution = Integer.parseInt(parts[1].replaceAll("[^0-9]", ""));
+                                
+                                  //  System.out.println("✅ Περνάει τα κριτήρια: " + current_video);
                                     available_videos.add(current_video);
-                                }
+                                
                             } catch (NumberFormatException ignored) {
                             }
                         }
@@ -163,7 +167,9 @@ public class ServerApp implements Runnable {
                 if (parts.length >= 2) {
                     try {
                         int res = Integer.parseInt(parts[1].replaceAll("[^0-9]", ""));
-                        if (res == resolution) return f;
+                        if (res == resolution) {
+                            return f;
+                        }
                     } catch (Exception ignored) {
                     }
                 }
