@@ -1,238 +1,154 @@
 package com.mycompany.polumesa_project;
 
-import fr.bmartel.speedtest.SpeedTestSocket;
-import fr.bmartel.speedtest.inter.ISpeedTestListener;
-import fr.bmartel.speedtest.model.SpeedTestError;
-import fr.bmartel.speedtest.SpeedTestReport;
-
 import java.io.*;
 import java.net.Socket;
-import java.time.Duration;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Scanner;
-import java.util.concurrent.CountDownLatch;
-import java.util.logging.Logger;
+import javax.swing.*;
 
-public class ClientApp implements Runnable {
+public class ClientGui extends javax.swing.JFrame {
 
-    private final String serverHost = "localhost";
-    private final int serverPort = 5000; //default port
-    private volatile int autoResolution = 0;
-    private volatile String format = "";
-    private final Logger logger = AppLogger.getLogger();
-    private final Logger statsLogger = AppLogger.getStatsLogger();
+    public ClientGui() {
+        initComponents();
+        comboFormat.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "mp4", "mkv", "avi" }));
+        comboProtocol.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "AUTO", "TCP", "UDP", "RTP" }));
+        claimVideos.addActionListener(evt -> fetchAvailableVideos());
+        jButton1.addActionListener(evt -> startStreaming());
+    }
 
-    private LocalDateTime startTime;
-    private LocalDateTime endTime;
+    @SuppressWarnings("unchecked")
+    private void initComponents() {
+        comboFormat = new javax.swing.JComboBox<>();
+        comboProtocol = new javax.swing.JComboBox<>();
+        claimVideos = new javax.swing.JButton();
+        jScrollPane1 = new javax.swing.JScrollPane();
+        listOfVideos = new javax.swing.JList<>();
+        jButton1 = new javax.swing.JButton();
+        jLabel1 = new javax.swing.JLabel();
+        jScrollPane2 = new javax.swing.JScrollPane();
+        jTextArea1 = new javax.swing.JTextArea();
 
-    @Override
-    public void run() {
+        setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
+        jScrollPane1.setViewportView(listOfVideos);
+        jButton1.setText("Start Streaming");
+        claimVideos.setText("Claim Videos");
+        jLabel1.setText("Streaming Video Application");
+        jTextArea1.setColumns(20);
+        jTextArea1.setRows(5);
+        jScrollPane2.setViewportView(jTextArea1);
 
-        try (Socket socket = new Socket(serverHost, serverPort)) {
-            startTime = LocalDateTime.now();
-            logger.info("Connected to server.");
-            statsLogger.info(">>> Streaming client started successfully. Ready for input."); //debugging
+        javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
+        getContentPane().setLayout(layout);
+        layout.setHorizontalGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(layout.createSequentialGroup().addGap(20, 20, 20)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(comboFormat)
+                    .addComponent(comboProtocol)
+                    .addComponent(claimVideos))
+                .addGap(30, 30, 30)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addComponent(jScrollPane1)
+                    .addComponent(jButton1))
+                .addGap(20, 20, 20))
+            .addComponent(jScrollPane2)
+            .addGroup(layout.createSequentialGroup().addGap(200, 200, 200).addComponent(jLabel1).addGap(0, 200, Short.MAX_VALUE))
+        );
+        layout.setVerticalGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+            .addGroup(layout.createSequentialGroup().addGap(20, 20, 20)
+                .addComponent(jLabel1)
+                .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
+                    .addGroup(layout.createSequentialGroup()
+                        .addGap(20, 20, 20)
+                        .addComponent(comboFormat)
+                        .addGap(10)
+                        .addComponent(comboProtocol)
+                        .addGap(10)
+                        .addComponent(claimVideos))
+                    .addGroup(layout.createSequentialGroup()
+                        .addGap(10)
+                        .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 100, javax.swing.GroupLayout.PREFERRED_SIZE)
+                        .addGap(10)
+                        .addComponent(jButton1)))
+                .addGap(10)
+                .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 120, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addGap(10))
+        );
 
+        pack();
+    }
+
+    private void fetchAvailableVideos() {
+        String format = comboFormat.getSelectedItem().toString();
+        int resolution = 1080; // δείξε όλα τα βίντεο
+
+        jTextArea1.append("Ζητούνται όλα τα διαθέσιμα βίντεο (" + format + " έως 1080p)");
+
+        try (Socket socket = new Socket("localhost", 5000)) {
             ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
             ObjectInputStream in = new ObjectInputStream(socket.getInputStream());
 
-            Scanner scanner = new Scanner(System.in);
-
-            float downloadSpeedMbps = runSpeedTest();
-            logger.info(String.format("Download speed: %.2f Mbps", downloadSpeedMbps));
-
-            if (downloadSpeedMbps < 1.0) {
-                autoResolution = 240;
-            } else if (downloadSpeedMbps < 3.0) {
-                autoResolution = 480;
-            } else if (downloadSpeedMbps < 6.0) {
-                autoResolution = 720;
-            } else {
-                autoResolution = 1080;
-            }
-
-            logger.info("Auto-selected resolution: " + autoResolution + "p");
-
-            System.out.print("Enter desired format (e.g. mp4): ");
-            format = scanner.nextLine();
-
             ArrayList<String> request = new ArrayList<>();
-            request.add(String.valueOf(autoResolution));
+            request.add(String.valueOf(resolution));
             request.add(format);
             out.writeObject(request);
 
-            ArrayList<String> availableVideos = (ArrayList<String>) in.readObject();
-            if (availableVideos.isEmpty()) {
-                logger.warning("No videos available with these specs.");
-                return;
-            }
+            ArrayList<String> videos = (ArrayList<String>) in.readObject();
 
-            logger.info("Available videos received: " + availableVideos.size());
-            for (int i = 0; i < availableVideos.size(); i++) {
-                System.out.println("  [" + i + "] " + availableVideos.get(i));
-            }
+            DefaultListModel<String> model = new DefaultListModel<>();
+            for (String v : videos) model.addElement(v);
+            listOfVideos.setModel(model);
 
-            System.out.print("Select video by index: ");
-            int videoIndex = Integer.parseInt(scanner.nextLine());
-            String selectedVideo = availableVideos.get(videoIndex);
+            jTextArea1.append("Βρέθηκαν " + videos.size() + " βίντεο.");
 
-            System.out.print("Select streaming protocol (UDP, TCP, RTP or leave empty for automatic choice): ");
-            String protocol = scanner.nextLine().trim().toUpperCase();
-
-            if (protocol.isEmpty()) {
-                try {
-                    String[] parts = selectedVideo.split("-");
-                    String resolutionPart = parts[1].replaceAll("[^0-9]", "");
-                    int res = Integer.parseInt(resolutionPart);
-                    if (res <= 240) {
-                        protocol = "TCP";
-                    } else if (res <= 480) {
-                        protocol = "UDP";
-                    } else {
-                        protocol = "RTP";
-                    }
-                    logger.info("Auto-selected protocol: " + protocol);
-                } catch (Exception e) {
-                    logger.warning("Could not determine resolution. Defaulting to TCP.");
-                    protocol = "TCP";
-                }
-            }
-
-            ArrayList<String> streamSpecs = new ArrayList<>();
-            streamSpecs.add(selectedVideo);
-            streamSpecs.add(protocol);
-            out.writeObject(streamSpecs);
-            logger.info("Streaming request sent successfully for: " + selectedVideo);
-
-            // FFmpeg stream recording (optional)
-            ArrayList<String> recordCommand = new ArrayList<>();
-            recordCommand.add("ffmpeg");
-            switch (protocol) {
-                case "UDP":
-                    recordCommand.add("-i");
-                    recordCommand.add("udp://127.0.0.1:6000");
-                    break;
-                case "TCP":
-                    recordCommand.add("-i");
-                    recordCommand.add("tcp://127.0.0.1:5100");
-                    break;
-                case "RTP":
-                    recordCommand.add("-i");
-                    recordCommand.add("video.sdp");
-                    break;
-            }
-            recordCommand.add("-c");
-            recordCommand.add("copy");
-            recordCommand.add("-y");
-            recordCommand.add("received_" + selectedVideo);
-
-            try {
-                ProcessBuilder builder = new ProcessBuilder(recordCommand);
-                builder.inheritIO();
-                builder.start();
-                logger.info("FFmpeg recording started.");
-            } catch (IOException e) {
-                logger.warning("Failed to start ffmpeg for recording: " + e.getMessage());
-                e.printStackTrace();
-            }
-
-            // Adaptive streaming thread
-            new Thread(() -> {
-                try {
-                    while (true) {
-                        Thread.sleep(10000);
-                        float newSpeed = runSpeedTest();
-                        logger.info("Adaptive check: speed = " + newSpeed + " Mbps");
-
-                        int newRes;
-                        if (newSpeed < 1.0) {
-                            newRes = 240;
-                        } else if (newSpeed < 3.0) {
-                            newRes = 480;
-                        } else if (newSpeed < 6.0) {
-                            newRes = 720;
-                        } else {
-                            newRes = 1080;
-                        }
-
-                        if (newRes < autoResolution) {
-                            logger.info("Requesting adaptive switch to " + newRes + "p");
-                            try (Socket adaptSocket = new Socket(serverHost, serverPort)) {
-                                ObjectOutputStream adaptOut = new ObjectOutputStream(adaptSocket.getOutputStream());
-                                ArrayList<String> adaptiveRequest = new ArrayList<>();
-                                adaptiveRequest.add("ADAPTIVE_SWITCH");
-                                adaptiveRequest.add(String.valueOf(newRes));
-                                adaptiveRequest.add(format);
-                                adaptOut.writeObject(adaptiveRequest);
-                            }
-                            autoResolution = newRes;
-                        }
-                    }
-                } catch (Exception e) {
-                    logger.warning("Error in adaptive streaming: " + e.getMessage());
-                }
-            }).start();
-
-            //Statistics build
-            endTime = LocalDateTime.now();
-            Duration playDuration = Duration.between(startTime, endTime);
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
-            String stats
-                    = "START: " + startTime.format(formatter)
-                    + " | END: " + endTime.format(formatter)
-                    + " | DURATION: " + playDuration.getSeconds() + "s"
-                    + " | RES: " + autoResolution + "p"
-                    + " | FORMAT: " + format
-                    + " | PROTOCOL: " + protocol
-                    + " | FILE: " + selectedVideo;
-
-            statsLogger.info(stats);
-
-        } catch (IOException | ClassNotFoundException e) {
-            logger.severe("Client error: " + e.getMessage());
+        } catch (Exception e) {
+            jTextArea1.append("Σφάλμα σύνδεσης: " + e.getMessage() + "");
         }
     }
 
-    private float runSpeedTest() {
-        SpeedTestSocket speedTestSocket = new SpeedTestSocket();
-        CountDownLatch latch = new CountDownLatch(1);
-        final float[] speedResult = {0f};
+   private void startStreaming() {
+    String format = comboFormat.getSelectedItem().toString();
+    String protocol = comboProtocol.getSelectedItem().toString();
+    String selectedVideo = listOfVideos.getSelectedValue();
 
-        speedTestSocket.addSpeedTestListener(new ISpeedTestListener() {
-            @Override
-            public void onCompletion(SpeedTestReport report) {
-                float bitsPerSecond = report.getTransferRateBit().floatValue();
-                speedResult[0] = bitsPerSecond / (1024 * 1024);
-                latch.countDown();
-            }
+    if (selectedVideo == null) {
+        jTextArea1.append("Διάλεξε πρώτα ένα βίντεο.\n");
+        return;
+    }
 
-            @Override
-            public void onError(SpeedTestError speedTestError, String errorMessage) {
-                AppLogger.getLogger().warning("Speed test error: " + errorMessage);
-                latch.countDown();
-            }
-
-            @Override
-            public void onProgress(float percent, SpeedTestReport report) {
-            }
-        });
-
-        speedTestSocket.startDownload("http://speedtest.tele2.net/1MB.zip");
-
+    if (protocol.equals("AUTO")) {
         try {
-            latch.await();
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+            int res = Integer.parseInt(selectedVideo.split("-")[1].replaceAll("[^0-9]", ""));
+            protocol = (res <= 240) ? "TCP" : (res <= 480) ? "UDP" : "RTP";
+            jTextArea1.append("Auto-selected protocol: " + protocol + "\n");
+        } catch (Exception e) {
+            jTextArea1.append("Αποτυχία ανάγνωσης ανάλυσης. Επιλογή TCP.\n");
+            protocol = "TCP";
         }
-
-        return speedResult[0];
     }
 
-    public static void main(String[] args) {
-        ClientApp client = new ClientApp();
-        new Thread(client).start();
+    
+    final String finalProtocol = protocol;
+    final String finalSelectedVideo = selectedVideo;
+    final String finalFormat = format;
+
+    ClientApp client = new ClientApp();
+
+    new Thread(() -> {
+        client.startStreaming(finalFormat, finalSelectedVideo, finalProtocol);
+        jTextArea1.append("Ξεκίνησε ροή: " + finalSelectedVideo + " μέσω " + finalProtocol + "\n");
+    }).start();
+}
+
+    public static void main(String args[]) {
+        java.awt.EventQueue.invokeLater(() -> new ClientGui().setVisible(true));
     }
+
+    private javax.swing.JButton claimVideos;
+    private javax.swing.JComboBox<String> comboFormat;
+    private javax.swing.JComboBox<String> comboProtocol;
+    private javax.swing.JButton jButton1;
+    private javax.swing.JLabel jLabel1;
+    private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JScrollPane jScrollPane2;
+    private javax.swing.JTextArea jTextArea1;
+    private javax.swing.JList<String> listOfVideos;
 }
